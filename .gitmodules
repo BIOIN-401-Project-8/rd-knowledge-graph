@@ -1,6 +1,6 @@
-[submodule "BioREx"]
-	path = BioREx
-	url = git@github.com:ncbi/BioREx.git
+[submodule "BioREx-docker"]
+	path = BioREx-docker
+	url = git@github.com:BIOIN-401-Project-8/BioREx-docker.git
 [submodule "AIONER-docker"]
 	path = AIONER-docker
 	url = git@github.com:BIOIN-401-Project-8/AIONER-docker.git

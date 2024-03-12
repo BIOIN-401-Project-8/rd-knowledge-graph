@@ -2,7 +2,7 @@ version: '3.8'
 services:
   devcontainer:
     build:
-      context: AIONER-docker
+      context: BioREx-docker
       dockerfile: Dockerfile
     environment:
       - LLAMA_INDEX_CACHE_DIR=/root/.cache
@@ -56,7 +56,7 @@ services:
 
   biorex:
     build:
-      context: BioREx
+      context: BioREx-docker
       dockerfile: Dockerfile
     environment:
       - LLAMA_INDEX_CACHE_DIR=/root/.cache

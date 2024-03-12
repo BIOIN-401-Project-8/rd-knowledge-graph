@@ -4,7 +4,6 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
 
 import neo4j
 import pandas as pd
@@ -18,8 +17,7 @@ def get_relation_queries(file: str, source: str):
     df.drop(columns=["1st", "2nd"], inplace=True)
 
     queries = []
-    for _, row in df.iterrows():
-        i = uuid4().hex.replace("-", "")[:8]
+    for i, row in df.iterrows():
         queries.append(
             f"""
                 MERGE (a{i}:`{row['1st Type']}`:Pubtator3 {{ConceptID: '{row['1st Concept ID']}', source: '{source}'}})
@@ -60,9 +58,9 @@ def main():
             for input_dir in args.input_relation_dirs:
                 for file in tqdm(glob.glob(f"{input_dir}/*.tsv")):
                     queries = get_relation_queries(file, input_dir)
-                    query_str = "\n".join(queries)
-                    logging.debug(query_str)
-                    session.run(query_str)
+                    for query in queries:
+                        logging.debug(query)
+                        session.run(query)
 
 
 if __name__ == "__main__":

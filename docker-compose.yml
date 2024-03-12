@@ -31,9 +31,6 @@ services:
     build:
       context: AIONER-docker
       dockerfile: Dockerfile
-    environment:
-      - LLAMA_INDEX_CACHE_DIR=/root/.cache
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     deploy:
       resources:
         reservations:
@@ -58,9 +55,6 @@ services:
     build:
       context: BioREx-docker
       dockerfile: Dockerfile
-    environment:
-      - LLAMA_INDEX_CACHE_DIR=/root/.cache
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     deploy:
       resources:
         reservations:
@@ -85,9 +79,6 @@ services:
     build:
       context: GNorm2-docker
       dockerfile: Dockerfile
-    environment:
-      - LLAMA_INDEX_CACHE_DIR=/root/.cache
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     deploy:
       resources:
         reservations:
@@ -112,9 +103,6 @@ services:
     build:
       context: TaggerOne-PubTator3-docker
       dockerfile: Dockerfile
-    environment:
-      - LLAMA_INDEX_CACHE_DIR=/root/.cache
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
     deploy:
       resources:
         reservations:

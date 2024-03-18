@@ -37,8 +37,8 @@ async def run_relation_query(session: neo4j.AsyncSession, file: str, date_pmid_l
         query = f"""
             CALL apoc.periodic.iterate(
                 "UNWIND $rows as row RETURN row",
-                "MATCH (a:`{node_1st_type}`:Pubtator3 {{ConceptID: row['1st Concept ID']}})
-                MATCH (b:`{node_2nd_type}`:Pubtator3 {{ConceptID: row['2nd Concept ID']}})
+                "MATCH (a:`{node_1st_type}`:_PubTator3 {{ConceptID: row['1st Concept ID']}})
+                MATCH (b:`{node_2nd_type}`:_PubTator3 {{ConceptID: row['2nd Concept ID']}})
                 MERGE (a)-[:`{relation_type}_PubTator3` {{PMID: row['PMID'], PubDate: row['PubDate']}}]->(b)",
                 {{batchSize: 1000, batchMode: "BATCH", parallel: true, params: {{rows: $rows}}}}
             )
@@ -150,18 +150,22 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
         files.extend(glob.glob(f"{input_dir}/*.tsv"))
     files = sorted(files)
     df = pd.DataFrame()
-    for files_batch in tqdm(batch(files, n=32000), total=len(files) // 32000 + 1):
-        dfs = process_map(load_bioconcepts_queries_df, files_batch, chunksize=1000, max_workers=32, disable=True)
+    for files_batch in tqdm(batch(files, n=64000), total=len(files) // 64000 + 1):
+        dfs = process_map(load_bioconcepts_queries_df, files_batch, chunksize=1000, max_workers=24, disable=True)
         df = pd.concat([df] + dfs)
         del dfs
         df = agg_bioconcepts(df)
     df.to_csv("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv", sep="\t", index=False)
     for node_type, df_type in tqdm(df.groupby("Type")):
+        logging.info(f"Creating constraint on {node_type} nodes")
+        query = f"CREATE CONSTRAINT IF NOT EXISTS FOR (a:`{node_type}`) REQUIRE a.ConceptID IS UNIQUE"
+        await run_query(session, query)
+        logging.info(f"Creating {len(df_type)} {node_type} nodes")
         query = f"""
             CALL apoc.periodic.iterate(
                 "UNWIND $rows as row RETURN row",
-                "MERGE (a:`Pubtator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
-                {{batchSize: 1000, batchMode: "BATCH", parallel: true, params: {{rows: $rows}}}}
+                "MERGE (a:`PubTator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
+                {{batchSize: 10000, batchMode: "BATCH", concurrency: 16, parallel: true, params: {{rows: $rows}}}}
             )
         """
         await run_query(session, query, rows=df_type.to_dict("records"))
@@ -207,8 +211,8 @@ async def main():
         uri=args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password), database=args.neo4j_database
     ) as driver:
         async with driver.session(database=args.neo4j_database) as session:
-            # await run_bioconcepts_queries(session, args.input_bioconcepts_dirs)
-            await run_relation_queries(session, args.input_relation_dirs)
+            await run_bioconcepts_queries(session, args.input_bioconcepts_dirs)
+            # await run_relation_queries(session, args.input_relation_dirs)
 
 
 if __name__ == "__main__":

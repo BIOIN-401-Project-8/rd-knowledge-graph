@@ -1,0 +1,2 @@
+matplotlib-venn==0.11.10
+neo4j==5.18.0

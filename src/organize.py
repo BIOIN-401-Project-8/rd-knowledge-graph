@@ -18,12 +18,12 @@ def convert_abstracts(input_dir: Path, output_dir: Path):
     output_dir.mkdir(exist_ok=True)
 
     for pmc_xml in tqdm(pmc_xmls):
-        path = Path(pmc_xml)
-        path_bioc = output_dir / path.with_suffix(".bioc").name
+        path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
         if path_bioc.exists():
             continue
-        with open(pmc_xml, 'r') as fp:
-            documents = list(pubmedxml2bioc(fp.read()))
+        documents = list(pubmedxml2bioc(str(pmc_xml)))
+        if not documents:
+            logging.warning(f"Could not convert {pmc_xml}")
         for document in documents:
             for passage in document.passages:
                 passage.infons["type"] = passage.infons["section"]
@@ -39,17 +39,19 @@ def convert_pmc_xml(input_dir: Path, output_dir: Path):
     output_dir.mkdir(exist_ok=True)
 
     for pmc_xml in tqdm(pmc_xmls):
-        path = Path(pmc_xml)
-        path_bioc = output_dir / path.with_suffix(".bioc").name
+        path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
         if path_bioc.exists():
             continue
-        with open(pmc_xml, 'r') as fp:
-            doc = next(pmcxml2bioc(fp.read()))
-        doc.encoding = 'utf-8'
-        doc.standalone = True
+        docs = pmcxml2bioc(str(pmc_xml))
+        if not docs:
+            logging.warning(f"Could not convert {pmc_xml}")
+        for doc in docs:
+            doc.encoding = 'utf-8'
+            doc.standalone = True
 
-        with open(str(path_bioc), 'w') as fp:
-            biocxml.dump(doc, fp)
+            with open(str(path_bioc), 'w') as fp:
+                biocxml.dump(doc, fp)
+            break
 
 
 def get_rgd_df_pmids(rgd_csv: str):

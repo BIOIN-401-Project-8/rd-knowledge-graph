@@ -10,3 +10,6 @@
 [submodule "TaggerOne-PubTator3-docker"]
 	path = TaggerOne-PubTator3-docker
 	url = git@github.com:BIOIN-401-Project-8/TaggerOne-PubTator3-docker.git
+[submodule "NLMChemTaggerNormalizer-docker"]
+	path = NLMChemTaggerNormalizer-docker
+	url = git@github.com:BIOIN-401-Project-8/NLMChemTaggerNormalizer-docker.git

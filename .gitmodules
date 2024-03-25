@@ -13,3 +13,6 @@
 [submodule "NLMChemTaggerNormalizer-docker"]
 	path = NLMChemTaggerNormalizer-docker
 	url = git@github.com:BIOIN-401-Project-8/NLMChemTaggerNormalizer-docker.git
+[submodule "tmVar3-docker"]
+	path = tmVar3-docker
+	url = git@github.com:BIOIN-401-Project-8/tmVar3-docker.git

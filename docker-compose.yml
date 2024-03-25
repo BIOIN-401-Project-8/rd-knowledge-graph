@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   devcontainer:
     build:
@@ -98,6 +97,20 @@ services:
     command: sleep infinity
     networks:
       - rgd-chatbot
+
+  nlmchem:
+    build:
+      context: NLMChemTaggerNormalizer-docker
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh:/root/.ssh:cached
+      - ~/.gitconfig:/root/.gitconfig:cached
+      - ~/.wakatime.cfg:/root/.wakatime.cfg:cached
+      - ~/.cache:/root/.cache:cached
+      - ~/Github/bioin-401-project/data:/data:cached
+    command: sleep infinity
 
   taggerone:
     build:

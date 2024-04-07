@@ -6,7 +6,7 @@
 	url = git@github.com:BIOIN-401-Project-8/AIONER-docker.git
 [submodule "GNorm2-docker"]
 	path = GNorm2-docker
-	url = git@github.com:BIOIN-401-Project-8/GNorm2-docker.git
+	url = git@hf.co:steventango/GNorm2-docker
 [submodule "TaggerOne-PubTator3-docker"]
 	path = TaggerOne-PubTator3-docker
 	url = git@github.com:BIOIN-401-Project-8/TaggerOne-PubTator3-docker.git

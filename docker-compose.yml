@@ -22,6 +22,8 @@ services:
       - ~/.wakatime.cfg:/root/.wakatime.cfg:cached
       - ~/.cache:/root/.cache:cached
       - ~/Github/bioin-401-project/data:/data:cached
+      - /media/data/bioin-401-project/pmc-open-access-subset:/data/pmc-open-access-subset:cached
+      - /media/data/bioin-401-project/PubTator3:/data/PubTator3:cached
     command: sleep infinity
     networks:
       - rgd-chatbot
@@ -98,6 +100,20 @@ services:
     networks:
       - rgd-chatbot
 
+  gnormplus:
+    build:
+      context: GNormPlus-docker
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh:/root/.ssh:cached
+      - ~/.gitconfig:/root/.gitconfig:cached
+      - ~/.wakatime.cfg:/root/.wakatime.cfg:cached
+      - ~/.cache:/root/.cache:cached
+      - ~/Github/bioin-401-project/data:/data:cached
+    command: sleep infinity
+
   nlmchem:
     build:
       context: NLMChemTaggerNormalizer-docker
@@ -135,6 +151,21 @@ services:
     command: sleep infinity
     networks:
       - rgd-chatbot
+
+  tmvar3:
+    build:
+      context: tmVar3-docker
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.ssh:/root/.ssh:cached
+      - ~/.gitconfig:/root/.gitconfig:cached
+      - ~/.wakatime.cfg:/root/.wakatime.cfg:cached
+      - ~/.cache:/root/.cache:cached
+      - ~/Github/bioin-401-project/data:/data:cached
+      - /media/data/bioin-401-project/rgd-knowledge-graph/tmVar3/Database:/app/Database:cached
+    command: sleep infinity
 
 networks:
   rgd-chatbot:

@@ -1,11 +1,16 @@
 import argparse
 import logging
+import os
+import random
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
+import bioc
 import matplotlib.pyplot as plt
 import pandas as pd
+import requests
 from bioc import BioCCollection, biocxml
 from bioconverters import pmcxml2bioc, pubmedxml2bioc
 from matplotlib_venn import venn3
@@ -29,7 +34,7 @@ def convert_abstracts(input_dir: Path, output_dir: Path):
                 passage.infons["type"] = passage.infons["section"]
         collection = BioCCollection.of_documents(*documents)
 
-        with open(str(path_bioc), 'w') as fp:
+        with open(str(path_bioc), "w") as fp:
             biocxml.dump(collection, fp)
 
 
@@ -46,10 +51,10 @@ def convert_pmc_xml(input_dir: Path, output_dir: Path):
         if not docs:
             logging.warning(f"Could not convert {pmc_xml}")
         for doc in docs:
-            doc.encoding = 'utf-8'
+            doc.encoding = "utf-8"
             doc.standalone = True
 
-            with open(str(path_bioc), 'w') as fp:
+            with open(str(path_bioc), "w") as fp:
                 biocxml.dump(doc, fp)
             break
 
@@ -71,10 +76,17 @@ def get_relation2pubtator3_df_pmids(relation2pubtator3_csv: str):
 
 def get_bioconcepts2pubtator3_pmids(bioconcepts2pubtator3_csv: str):
     logging.info(f"Getting PMIDs from {bioconcepts2pubtator3_csv}")
-    bioconcepts2pubtator3_df = pd.read_csv(
-        bioconcepts2pubtator3_csv, sep="\t", header=None, names=["PMID"], usecols=["PMID"], dtype={"PMID": int}
-    )
-    return set(bioconcepts2pubtator3_df["PMID"])
+    # pmids = set()
+    # with open(bioconcepts2pubtator3_csv) as f, tqdm(total=None) as pbar:
+    #     for line in f:
+    #         pmid = int(line.split("\t")[0])
+    #         pmids.add(pmid)
+    #         inc = len(pmids) - pbar.n
+    #         pbar.update(inc)
+    pmids = {38060310}
+    pmids = range(1, max(pmids) + 1)
+    pmids = set(pmids)
+    return pmids
 
 
 def main():
@@ -121,6 +133,12 @@ def main():
     out_dir_local_raw_abstracts.mkdir(parents=True, exist_ok=True)
     out_dir_local_bioc = out_dir_local / "bioc"
     out_dir_local_bioc.mkdir(parents=True, exist_ok=True)
+    api_path = out_dir / "api"
+    api_path.mkdir(exist_ok=True)
+    api_bioconcepts2pubtator3_path = api_path / "bioconcepts2pubtator3"
+    api_bioconcepts2pubtator3_path.mkdir(exist_ok=True)
+    api_relation2pubtator3_path = api_path / "relation2pubtator3"
+    api_relation2pubtator3_path.mkdir(exist_ok=True)
 
     rgd_df, rgd_pmids = get_rgd_df_pmids(args.rgd_csv)
     relation2pubtator3_df, relation2pubtator3_pmids = get_relation2pubtator3_df_pmids(args.relation2pubtator3_csv)
@@ -134,7 +152,12 @@ def main():
     # total = len(relevant_pmids & bioconcepts2pubtator3_pmids)
     # extract_bioconcepts(args.bioconcepts2pubtator3_csv, out_dir_ftp_bioconcepts2pubtator3, relevant_pmids, total)
     relevant_but_not_in_bioconcepts2pubtator3 = relevant_pmids - bioconcepts2pubtator3_pmids
-    articles_pmids = copy_raw_articles(out_dir_local_raw_articles, rgd_df, relevant_but_not_in_bioconcepts2pubtator3)
+    pubtator3_api_pmids = pull_from_pubtator3_api_batched(
+        relevant_but_not_in_bioconcepts2pubtator3, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path
+    )
+    relevant_but_not_in_pubtator3 = relevant_but_not_in_bioconcepts2pubtator3 - pubtator3_api_pmids
+
+    articles_pmids = copy_raw_articles(out_dir_local_raw_articles, rgd_df, relevant_but_not_in_pubtator3)
     remaining_pmids = relevant_but_not_in_bioconcepts2pubtator3 - articles_pmids
     logging.info(f"Remaining PMIDs: {len(remaining_pmids)}")
     copy_raw_dir(in_dir_pubmed_abstract, out_dir_local_raw_abstracts, remaining_pmids)
@@ -142,10 +165,9 @@ def main():
     convert_pmc_xml(out_dir_local_raw_articles, out_dir_local_bioc)
     convert_abstracts(out_dir_local_raw_abstracts, out_dir_local_bioc)
 
+
 def copy_raw_articles(out_dir_local_raw_articles, rgd_df, pmids: set):
-    logging.info(
-        f"Copying {len(pmids)} articles to {out_dir_local_raw_articles}"
-    )
+    logging.info(f"Copying {len(pmids)} articles to {out_dir_local_raw_articles}")
     df = rgd_df[rgd_df["PMID"].isin(pmids)]
     df = df[df["article_path"].notnull()]
     copied_pmids = set()
@@ -200,9 +222,93 @@ def extract_bioconcepts(
             to_export = buffer_df[~buffer_df["PMID"].isin(chunk_pmids)]
             buffer_df = buffer_df[buffer_df["PMID"].isin(chunk_pmids)]
             group_by_pmid_to_tsv(out_dir_ftp_bioconcepts2pubtator3, to_export, False)
-            pbar.update(len(to_export['PMID'].unique()))
+            pbar.update(len(to_export["PMID"].unique()))
         group_by_pmid_to_tsv(out_dir_ftp_bioconcepts2pubtator3, buffer_df, progress_bar=False)
-        pbar.update(len(buffer_df['PMID'].unique()))
+        pbar.update(len(buffer_df["PMID"].unique()))
+
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx : min(ndx + n, l)]
+
+
+def pull_from_pubtator3_api_batched(pmids: set, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path):
+    PUBTATOR3_PMID_CUTOFF = 38506922
+    fetchable_pmids = {pmid for pmid in pmids if pmid <= PUBTATOR3_PMID_CUTOFF}
+    logging.info(f"{len(fetchable_pmids)} PMIDs fetchable from PubTator3 API")
+    fetched_paths = set(api_bioconcepts2pubtator3_path.glob("*.tsv"))
+    fetched_pmids = set(map(lambda x: int(x.stem), fetched_paths))
+    logging.info(f"Aleady fetched {len(fetched_pmids)} PMIDs from PubTator3 API")
+    not_fetched_pmids = fetchable_pmids - fetched_pmids
+    not_fetched_pmids = list(map(str, not_fetched_pmids))
+    logging.info(f"Fetching {len(not_fetched_pmids)} PMIDs from PubTator3 API")
+    for pmid_batch in tqdm(batch(not_fetched_pmids, 100), total=len(not_fetched_pmids) // 100):
+        pull_from_pubtator3_api(pmid_batch, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path)
+    return fetchable_pmids
+
+
+def pull_from_pubtator3_api(pmids: set, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path):
+    url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocxml?pmids={','.join(pmids)}&full=true"
+    logging.info(url)
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception(f"Failed to pull {pmids} from PubTator3 API")
+    collection = bioc.loads(response.text)
+    for document in collection.documents:
+        process_document_from_pubtator3_api(api_bioconcepts2pubtator3_path, api_relation2pubtator3_path, document)
+
+
+def process_document_from_pubtator3_api(api_bioconcepts2pubtator3_path, api_relation2pubtator3_path, document):
+    pmid = document.id
+    annotations = []
+    for passage in document.passages:
+        for annotation in passage.annotations:
+            annotations.append(
+                {
+                    "PMID": pmid,
+                    "Type":  annotation.infons["type"],
+                    "Concept ID": annotation.infons.get("identifier"),
+                    "Mentions": annotation.text,
+                    "Resource": "PubTator3",
+                }
+            )
+    annotation_df = pd.DataFrame(annotations)
+    annotation_df = annotation_df.groupby(["PMID", "Type", "Concept ID", "Resource"])["Mentions"].apply(
+        lambda x: "|".join(set(x))
+    ).reset_index()
+    annotation_df.to_csv(api_bioconcepts2pubtator3_path / f"{pmid}.tsv", sep="\t", index=False)
+    relations = []
+    relation_type_map = {
+        "Association": "associate",
+        "Bind": "interact",
+        "Cause": "cause",
+        "Comparison": "compare",
+        "Cotreatment": "cotreat",
+        "Drug_Interaction": "drug_interact",
+        "Inhibit": "inhibit",
+        "Interact": "interact",
+        "Negative_Correlation": "negative_correlate",
+        "Positive_Correlation": "positive_correlate",
+        "Prevent": "prevent",
+        "Stimulate": "stimulate",
+        "Treatment": "treat",
+    }
+    for relation in document.relations:
+        try:
+            relations.append(
+                {
+                    "PMID": pmid,
+                    "Type": relation_type_map[relation.infons["type"]],
+                    "1st": relation.infons["role1"],
+                    "2nd": relation.infons["role2"],
+                }
+            )
+        except KeyError as e:
+            logging.error(pmid)
+            raise e
+    df = pd.DataFrame(relations)
+    df.to_csv(api_relation2pubtator3_path / f"{pmid}.tsv", sep="\t", index=False)
 
 
 def group_by_pmid_to_tsv(out_dir: Path, df, progress_bar=True):

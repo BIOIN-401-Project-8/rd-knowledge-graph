@@ -1,9 +1,7 @@
 import argparse
+import gzip
 import logging
-import os
-import random
 import shutil
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +13,7 @@ from bioc import BioCCollection, biocxml
 from bioconverters import pmcxml2bioc, pubmedxml2bioc
 from matplotlib_venn import venn3
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 
 def convert_abstracts(input_dir: Path, output_dir: Path):
@@ -26,7 +25,13 @@ def convert_abstracts(input_dir: Path, output_dir: Path):
         path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
         if path_bioc.exists():
             continue
-        documents = list(pubmedxml2bioc(str(pmc_xml)))
+        source = str(pmc_xml)
+        import io
+        with open(source) as f:
+            text = f.read()
+            text = text.replace("&plusmn;", "±")
+            string_io = io.StringIO(text)
+            documents = list(pubmedxml2bioc(string_io))
         if not documents:
             logging.warning(f"Could not convert {pmc_xml}")
         for document in documents:
@@ -43,20 +48,23 @@ def convert_pmc_xml(input_dir: Path, output_dir: Path):
     pmc_xmls = list(input_dir.glob("*.xml"))
     output_dir.mkdir(exist_ok=True)
 
-    for pmc_xml in tqdm(pmc_xmls):
-        path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
-        if path_bioc.exists():
-            continue
-        docs = pmcxml2bioc(str(pmc_xml))
-        if not docs:
-            logging.warning(f"Could not convert {pmc_xml}")
-        for doc in docs:
-            doc.encoding = "utf-8"
-            doc.standalone = True
+    process_map(convert_pmc_xml_single, pmc_xmls, [output_dir] * len(pmc_xmls), chunksize=1, max_workers=24)
 
-            with open(str(path_bioc), "w") as fp:
-                biocxml.dump(doc, fp)
-            break
+
+def convert_pmc_xml_single(pmc_xml: Path, output_dir: Path):
+    path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
+    if path_bioc.exists():
+        return
+    docs = pmcxml2bioc(str(pmc_xml))
+    if not docs:
+        logging.warning(f"Could not convert {pmc_xml}")
+    for doc in docs:
+        doc.encoding = "utf-8"
+        doc.standalone = True
+
+        with open(str(path_bioc), "w") as fp:
+            biocxml.dump(doc, fp)
+        break
 
 
 def get_rgd_df_pmids(rgd_csv: str):
@@ -85,7 +93,6 @@ def get_bioconcepts2pubtator3_pmids(bioconcepts2pubtator3_csv: str):
     #         pbar.update(inc)
     pmids = {38060310}
     pmids = range(1, max(pmids) + 1)
-    pmids = set(pmids)
     return pmids
 
 
@@ -98,9 +105,7 @@ def main():
     parser.add_argument(
         "--bioconcepts2pubtator3_csv", help="bioconcepts2pubtator3 csv", default="/data/PubTator3/bioconcepts2pubtator3"
     )
-    parser.add_argument(
-        "--in_dir_pubmed_abstract", help="input directory", default="/data/pmc-open-access-subset/efetch/PubmedArticle"
-    )
+    parser.add_argument("--in_dir_pubmed_abstract", help="input directory", default="/data/Archive/pubmed/Archive")
     parser.add_argument("--out_dir", help="output directory", default="/data/rgd-knowledge-graph/pubtator3")
     args = parser.parse_args()
 
@@ -141,51 +146,80 @@ def main():
     api_relation2pubtator3_path.mkdir(exist_ok=True)
 
     rgd_df, rgd_pmids = get_rgd_df_pmids(args.rgd_csv)
+    logging.info(f"Length of rgd_df: {len(rgd_df)}")
+    logging.info(f"rgd_pmid len: {len(rgd_pmids)}")
+    logging.info(f"rgd_pmid max: {max(rgd_pmids)}")
     relation2pubtator3_df, relation2pubtator3_pmids = get_relation2pubtator3_df_pmids(args.relation2pubtator3_csv)
     bioconcepts2pubtator3_pmids = get_bioconcepts2pubtator3_pmids(args.bioconcepts2pubtator3_csv)
-
+    print(f"bioconcepts2pubtator3_pmids max {max(bioconcepts2pubtator3_pmids)}")
     # plot_venn_diagram(out_dir, rgd_pmids, relation2pubtator3_pmids, bioconcepts2pubtator3_pmids)
 
     relevant_pmids = relation2pubtator3_pmids & rgd_pmids
 
     # extract_relations(out_dir_ftp_relation2pubtator3, relation2pubtator3_df, relevant_pmids)
-    # total = len(relevant_pmids & bioconcepts2pubtator3_pmids)
+    # total = len([pmid for pmid in relevant_pmids if pmid in bioconcepts2pubtator3_pmids])
     # extract_bioconcepts(args.bioconcepts2pubtator3_csv, out_dir_ftp_bioconcepts2pubtator3, relevant_pmids, total)
-    relevant_but_not_in_bioconcepts2pubtator3 = relevant_pmids - bioconcepts2pubtator3_pmids
+    relevant_in_ftp  = {pmid for pmid in rgd_pmids if pmid in bioconcepts2pubtator3_pmids}
+    logging.info(f"Relevant PMIDs in FTP: {len(relevant_in_ftp)}")
+    relevant_but_not_in_ftp = {pmid for pmid in rgd_pmids if pmid not in bioconcepts2pubtator3_pmids}
     pubtator3_api_pmids = pull_from_pubtator3_api_batched(
-        relevant_but_not_in_bioconcepts2pubtator3, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path
+        relevant_but_not_in_ftp, api_bioconcepts2pubtator3_path, api_relation2pubtator3_path
     )
-    relevant_but_not_in_pubtator3 = relevant_but_not_in_bioconcepts2pubtator3 - pubtator3_api_pmids
+    relevant_but_not_in_pubtator3 = relevant_but_not_in_ftp - pubtator3_api_pmids
 
     articles_pmids = copy_raw_articles(out_dir_local_raw_articles, rgd_df, relevant_but_not_in_pubtator3)
-    remaining_pmids = relevant_but_not_in_bioconcepts2pubtator3 - articles_pmids
-    logging.info(f"Remaining PMIDs: {len(remaining_pmids)}")
-    copy_raw_dir(in_dir_pubmed_abstract, out_dir_local_raw_abstracts, remaining_pmids)
+    remaining_pmids = relevant_but_not_in_pubtator3 - articles_pmids
+    abstract_pmids = copy_raw_dir(in_dir_pubmed_abstract, out_dir_local_raw_abstracts, remaining_pmids)
+    logging.info(f"Max Abstract PMID: {max(abstract_pmids)}")
 
     convert_pmc_xml(out_dir_local_raw_articles, out_dir_local_bioc)
     convert_abstracts(out_dir_local_raw_abstracts, out_dir_local_bioc)
 
 
 def copy_raw_articles(out_dir_local_raw_articles, rgd_df, pmids: set):
-    logging.info(f"Copying {len(pmids)} articles to {out_dir_local_raw_articles}")
     df = rgd_df[rgd_df["PMID"].isin(pmids)]
     df = df[df["article_path"].notnull()]
+
+    logging.info(f"Cleaning {out_dir_local_raw_articles}")
+    cleaned = 0
+    for path in out_dir_local_raw_articles.glob("*.xml"):
+        pmid = int(path.stem)
+        if pmid not in pmids:
+            path.unlink()
+            cleaned += 1
+    logging.info(f"Cleaned {cleaned} irrelevant PMID articles from {out_dir_local_raw_articles}")
+
+    logging.info(f"Copying {len(df)} articles to {out_dir_local_raw_articles}")
     copied_pmids = set()
     for pmid, article_path in tqdm(zip(df["PMID"], df["article_path"]), total=len(df)):
-        copied_pmid = copy_raw(article_path, out_dir_local_raw_articles, pmid)
+        copied_pmid = copy_raw(Path(article_path), out_dir_local_raw_articles, pmid)
         if copied_pmid:
             copied_pmids.add(pmid)
     return copied_pmids
 
 
-def copy_raw_dir(in_dir_pubmed_article: Path, out_dir_local: Path, relevant_but_not_in_bioconcepts2pubtator3: set):
+def copy_raw_dir(in_dir_pubmed_article: Path, out_dir_local: Path, pmids: set):
     logging.info(
-        f"Copying {len(relevant_but_not_in_bioconcepts2pubtator3)} from {in_dir_pubmed_article} to {out_dir_local}"
+        f"Cleaning {out_dir_local}"
+    )
+    cleaned = 0
+    for path in out_dir_local.glob("*.xml"):
+        pmid = int(path.stem)
+        if pmid not in pmids:
+            path.unlink()
+            cleaned += 1
+    logging.info(f"Cleaned {cleaned} irrelevant PMID articles from {out_dir_local}")
+
+    logging.info(
+        f"Copying {len(pmids)} from {in_dir_pubmed_article} to {out_dir_local}"
     )
     out_dir_local.mkdir(exist_ok=True)
     articles_pmids = set()
-    for pmid in tqdm(relevant_but_not_in_bioconcepts2pubtator3):
-        in_pubmed_path = in_dir_pubmed_article / f"{pmid}.xml"
+    for pmid in tqdm(pmids):
+        padded_pmid = f"{pmid:08d}"
+        in_pubmed_path = (
+            in_dir_pubmed_article / padded_pmid[0:2] / padded_pmid[2:4] / padded_pmid[4:6] / f"{pmid}.xml.gz"
+        )
         pmid_copied = copy_raw(in_pubmed_path, out_dir_local, pmid)
         if pmid_copied:
             articles_pmids.add(pmid_copied)
@@ -196,8 +230,17 @@ def copy_raw_dir(in_dir_pubmed_article: Path, out_dir_local: Path, relevant_but_
 def copy_raw(in_pubmed_path: Path, out_dir_local: Path, pmid: int):
     try:
         out_pubmed_path = out_dir_local / f"{pmid}.xml"
+        if out_pubmed_path.stat().st_size == 0:
+            out_pubmed_path.unlink()
         if not out_pubmed_path.exists():
-            shutil.copy(in_pubmed_path, out_pubmed_path)
+            if in_pubmed_path.suffix == ".gz":
+                with gzip.open(in_pubmed_path, "rb") as f_in:
+                    with open(out_pubmed_path, "wb") as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+            else:
+                with open(in_pubmed_path, "rb") as f_in:
+                    with open(out_pubmed_path, "wb") as f_out:
+                        shutil.copyfileobj(f_in, f_out)
         return pmid
     except FileNotFoundError:
         logging.warning(f"Could not find {in_pubmed_path}")
@@ -206,6 +249,13 @@ def copy_raw(in_pubmed_path: Path, out_dir_local: Path, pmid: int):
 def extract_bioconcepts(
     bioconcepts2pubtator3_csv: Path, out_dir_ftp_bioconcepts2pubtator3: Path, relevant_pmids: set, total: int
 ):
+    logging.info(f"Cleaning {out_dir_ftp_bioconcepts2pubtator3}")
+    cleaned = 0
+    for path in tqdm(out_dir_ftp_bioconcepts2pubtator3.glob("*.tsv")):
+        if int(path.stem) not in relevant_pmids:
+            path.unlink()
+            cleaned += 1
+    logging.info(f"Cleaned {cleaned} irrelevant PMID bioconcepts from {out_dir_ftp_bioconcepts2pubtator3}")
     logging.info(f"Extracting {len(relevant_pmids)} relevant PMID bioconcepts to {out_dir_ftp_bioconcepts2pubtator3}")
     with tqdm(total=total) as pbar, pd.read_csv(
         bioconcepts2pubtator3_csv,
@@ -239,6 +289,13 @@ def pull_from_pubtator3_api_batched(pmids: set, api_bioconcepts2pubtator3_path, 
     logging.info(f"{len(fetchable_pmids)} PMIDs fetchable from PubTator3 API")
     fetched_paths = set(api_bioconcepts2pubtator3_path.glob("*.tsv"))
     fetched_pmids = set(map(lambda x: int(x.stem), fetched_paths))
+    logging.info(f"Cleaning {api_bioconcepts2pubtator3_path}")
+    cleaned = 0
+    for pmid in fetched_pmids - fetchable_pmids:
+        path = api_bioconcepts2pubtator3_path / f"{pmid}.tsv"
+        path.unlink()
+        cleaned += 1
+    logging.info(f"Cleaned {cleaned} irrelevant PMID bioconcepts from {api_bioconcepts2pubtator3_path}")
     logging.info(f"Aleady fetched {len(fetched_pmids)} PMIDs from PubTator3 API")
     not_fetched_pmids = fetchable_pmids - fetched_pmids
     not_fetched_pmids = list(map(str, not_fetched_pmids))
@@ -263,20 +320,27 @@ def process_document_from_pubtator3_api(api_bioconcepts2pubtator3_path, api_rela
     pmid = document.id
     annotations = []
     for passage in document.passages:
+        if article_id_pmid := passage.infons.get("article-id_pmid"):
+            pmid = article_id_pmid
         for annotation in passage.annotations:
             annotations.append(
                 {
                     "PMID": pmid,
-                    "Type":  annotation.infons["type"],
+                    "Type": annotation.infons["type"],
                     "Concept ID": annotation.infons.get("identifier"),
                     "Mentions": annotation.text,
                     "Resource": "PubTator3",
                 }
             )
+    if not annotations:
+        (api_bioconcepts2pubtator3_path / f"{pmid}.tsv").touch()
+        return
     annotation_df = pd.DataFrame(annotations)
-    annotation_df = annotation_df.groupby(["PMID", "Type", "Concept ID", "Resource"])["Mentions"].apply(
-        lambda x: "|".join(set(x))
-    ).reset_index()
+    annotation_df = (
+        annotation_df.groupby(["PMID", "Type", "Concept ID", "Resource"])["Mentions"]
+        .apply(lambda x: "|".join(set(x)))
+        .reset_index()
+    )
     annotation_df.to_csv(api_bioconcepts2pubtator3_path / f"{pmid}.tsv", sep="\t", index=False)
     relations = []
     relation_type_map = {
@@ -307,6 +371,8 @@ def process_document_from_pubtator3_api(api_bioconcepts2pubtator3_path, api_rela
         except KeyError as e:
             logging.error(pmid)
             raise e
+    if not relations:
+        return
     df = pd.DataFrame(relations)
     df.to_csv(api_relation2pubtator3_path / f"{pmid}.tsv", sep="\t", index=False)
 
@@ -323,6 +389,13 @@ def group_by_pmid_to_tsv(out_dir: Path, df, progress_bar=True):
 
 
 def extract_relations(out_dir_ftp_relation2pubtator3: Path, relation2pubtator3_df: pd.DataFrame, relevant_pmids: set):
+    logging.info(f"Cleaning {out_dir_ftp_relation2pubtator3}")
+    cleaned = 0
+    for path in tqdm(out_dir_ftp_relation2pubtator3.glob("*.tsv")):
+        if int(path.stem) not in relevant_pmids:
+            path.unlink()
+            cleaned += 1
+    logging.info(f"Cleaned {cleaned} irrelevant PMID relations from {out_dir_ftp_relation2pubtator3}")
     logging.info(f"Extracting {len(relevant_pmids)} relevant PMID relations to {out_dir_ftp_relation2pubtator3}")
     rgd_relation2pubtator3_df = relation2pubtator3_df[relation2pubtator3_df["PMID"].isin(relevant_pmids)]
     group_by_pmid_to_tsv(out_dir_ftp_relation2pubtator3, rgd_relation2pubtator3_df)

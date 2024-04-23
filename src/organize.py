@@ -98,7 +98,7 @@ def get_bioconcepts2pubtator3_pmids(bioconcepts2pubtator3_csv: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rgd_csv", help="rgd csv", default="/data/pmc-open-access-subset/merged.csv")
+    parser.add_argument("--rgd_csv", help="rgd csv", default="/data/merged.csv")
     parser.add_argument(
         "--relation2pubtator3_csv", help="relation2pubtator3 csv", default="/data/PubTator3/relation2pubtator3"
     )
@@ -106,7 +106,7 @@ def main():
         "--bioconcepts2pubtator3_csv", help="bioconcepts2pubtator3 csv", default="/data/PubTator3/bioconcepts2pubtator3"
     )
     parser.add_argument("--in_dir_pubmed_abstract", help="input directory", default="/data/Archive/pubmed/Archive")
-    parser.add_argument("--out_dir", help="output directory", default="/data/rgd-knowledge-graph/pubtator3")
+    parser.add_argument("--out_dir", help="output directory", default="/data/rd-knowledge-graph/pubtator3")
     args = parser.parse_args()
 
     in_dir_pubmed_abstract = Path(args.in_dir_pubmed_abstract)

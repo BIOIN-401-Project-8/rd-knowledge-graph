@@ -156,9 +156,9 @@ def main():
 
     relevant_pmids = relation2pubtator3_pmids & rgd_pmids
 
-    # extract_relations(out_dir_ftp_relation2pubtator3, relation2pubtator3_df, relevant_pmids)
-    # total = len([pmid for pmid in relevant_pmids if pmid in bioconcepts2pubtator3_pmids])
-    # extract_bioconcepts(args.bioconcepts2pubtator3_csv, out_dir_ftp_bioconcepts2pubtator3, relevant_pmids, total)
+    extract_relations(out_dir_ftp_relation2pubtator3, relation2pubtator3_df, relevant_pmids)
+    total = len([pmid for pmid in relevant_pmids if pmid in bioconcepts2pubtator3_pmids])
+    extract_bioconcepts(args.bioconcepts2pubtator3_csv, out_dir_ftp_bioconcepts2pubtator3, relevant_pmids, total)
     relevant_in_ftp  = {pmid for pmid in rgd_pmids if pmid in bioconcepts2pubtator3_pmids}
     logging.info(f"Relevant PMIDs in FTP: {len(relevant_in_ftp)}")
     relevant_but_not_in_ftp = {pmid for pmid in rgd_pmids if pmid not in bioconcepts2pubtator3_pmids}

@@ -53,18 +53,18 @@ def convert_pmc_xml(input_dir: Path, output_dir: Path):
 
 def convert_pmc_xml_single(pmc_xml: Path, output_dir: Path):
     path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
-    if path_bioc.exists():
-        return
-    docs = pmcxml2bioc(str(pmc_xml))
-    if not docs:
-        logging.warning(f"Could not convert {pmc_xml}")
-    for doc in docs:
-        doc.encoding = "utf-8"
-        doc.standalone = True
+    documents = list(pmcxml2bioc(str(pmc_xml)))
+    if not documents:
+        raise Exception(f"Could not convert {pmc_xml}")
+    for document in documents:
+        document.encoding = "utf-8"
+        document.standalone = True
+        for passage in document.passages:
+            passage.infons["type"] = passage.infons["section"]
 
-        with open(str(path_bioc), "w") as fp:
-            biocxml.dump(doc, fp)
-        break
+    collection = BioCCollection.of_documents(*documents)
+    with open(str(path_bioc), "w") as fp:
+        biocxml.dump(collection, fp)
 
 
 def get_rgd_df_pmids(rgd_csv: str):

@@ -98,7 +98,7 @@ def get_bioconcepts2pubtator3_pmids(bioconcepts2pubtator3_csv: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rgd_csv", help="rgd csv", default="/data/merged.csv")
+    parser.add_argument("--rgd_csv", help="rgd csv", default="/data/pmc-open-access-subset/merged.csv")
     parser.add_argument(
         "--relation2pubtator3_csv", help="relation2pubtator3 csv", default="/data/PubTator3/relation2pubtator3"
     )

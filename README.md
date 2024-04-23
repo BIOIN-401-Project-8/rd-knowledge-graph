@@ -3,10 +3,7 @@ Rare genetic diseases knowledge graph
 
 
 ```bash
-python organize.py
-
-docker compose build
+docker compose run devcontainer python3 src/organize.py
 source run.sh
-
 python ingest.py
 ```

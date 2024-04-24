@@ -53,13 +53,14 @@ def convert_pmc_xml(input_dir: Path, output_dir: Path):
 
 def convert_pmc_xml_single(pmc_xml: Path, output_dir: Path):
     path_bioc = output_dir / pmc_xml.with_suffix(".bioc").name
-
+    pmid = pmc_xml.stem
     # if path_bioc.exists():
     #     return
     documents = list(pmcxml2bioc(str(pmc_xml)))
     if not documents:
         raise Exception(f"Could not convert {pmc_xml}")
     for document in documents:
+        document.id = pmid
         document.encoding = "utf-8"
         document.standalone = True
         for passage in document.passages:

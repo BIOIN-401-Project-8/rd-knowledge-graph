@@ -96,7 +96,7 @@ def main():
                     while pointer_scanning < len(gnorm2_gene_annotations_queue):
                         gnorm2_annotation = gnorm2_gene_annotations_queue[pointer_scanning]
                         if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and "NCBI Gene" in gnorm2_annotation.infons:
-                            aioner_annotation.infons["NCBI Gene"] = gnorm2_annotation.infons["NCBI Gene"]
+                            aioner_annotation.infons["identifier"] = gnorm2_annotation.infons["NCBI Gene"]
                             pointer_last_matched = pointer_scanning + 1
                             break
                         pointer_scanning += 1
@@ -108,7 +108,7 @@ def main():
                     while pointer_scanning < len(gnorm2_species_annotations_queue):
                         gnorm2_annotation = gnorm2_species_annotations_queue[pointer_scanning]
                         if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and "NCBI Taxonomy" in gnorm2_annotation.infons:
-                            aioner_annotation.infons["NCBI Taxonomy"] = gnorm2_annotation.infons["NCBI Taxonomy"]
+                            aioner_annotation.infons["identifier"] = gnorm2_annotation.infons["NCBI Taxonomy"]
                             pointer_last_matched = pointer_scanning + 1
                             break
                         pointer_scanning += 1
@@ -119,7 +119,7 @@ def main():
                     pointer_scanning = pointer_last_matched
                     while pointer_scanning < len(chemical_annotations_queue):
                         chemical_annotation = chemical_annotations_queue[pointer_scanning]
-                        if chemical_annotation.locations[0].offset == aioner_annotation.locations[0].offset and chemical_annotation.locations[0].length == aioner_annotation.locations[0].length and chemical_annotation.infons.get("type") == "Chemical" and "identifier" in chemical_annotation.infons:
+                        if chemical_annotation.locations[0].offset == aioner_annotation.locations[0].offset and chemical_annotation.locations[0].length == aioner_annotation.locations[0].length and chemical_annotation.infons.get("type") == "Chemical" and "identifier" in chemical_annotation.infons and chemical_annotation.infons["identifier"] != "-":
                             aioner_annotation.infons["identifier"] = chemical_annotation.infons["identifier"]
                             pointer_last_matched = pointer_scanning + 1
                             break

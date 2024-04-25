@@ -95,7 +95,7 @@ def main():
                     pointer_scanning = pointer_last_matched
                     while pointer_scanning < len(gnorm2_gene_annotations_queue):
                         gnorm2_annotation = gnorm2_gene_annotations_queue[pointer_scanning]
-                        if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and gnorm2_annotation.infons.get("type") == "Gene" and "NCBI Gene" in gnorm2_annotation.infons:
+                        if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and "NCBI Gene" in gnorm2_annotation.infons:
                             aioner_annotation.infons["NCBI Gene"] = gnorm2_annotation.infons["NCBI Gene"]
                             pointer_last_matched = pointer_scanning + 1
                             break
@@ -107,7 +107,7 @@ def main():
                     pointer_scanning = pointer_last_matched
                     while pointer_scanning < len(gnorm2_species_annotations_queue):
                         gnorm2_annotation = gnorm2_species_annotations_queue[pointer_scanning]
-                        if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and gnorm2_annotation.infons.get("type") == "Species" and "NCBI Taxonomy" in gnorm2_annotation.infons:
+                        if gnorm2_annotation.locations[0].offset == aioner_annotation.locations[0].offset and gnorm2_annotation.locations[0].length == aioner_annotation.locations[0].length and "NCBI Taxonomy" in gnorm2_annotation.infons:
                             aioner_annotation.infons["NCBI Taxonomy"] = gnorm2_annotation.infons["NCBI Taxonomy"]
                             pointer_last_matched = pointer_scanning + 1
                             break

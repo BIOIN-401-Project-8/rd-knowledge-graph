@@ -47,8 +47,6 @@ services:
       - ~/.cache:/root/.cache:cached
       - ~/Github/bioin-401-project/data:/data:cached
     command: sleep infinity
-    networks:
-      - rgd-chatbot
 
   biorex:
     build:
@@ -71,8 +69,6 @@ services:
       - ~/.cache:/root/.cache:cached
       - ~/Github/bioin-401-project/data:/data:cached
     command: sleep infinity
-    networks:
-      - rgd-chatbot
 
   gnorm2:
     build:
@@ -95,8 +91,6 @@ services:
       - ~/.cache:/root/.cache:cached
       - ~/Github/bioin-401-project/data:/data:cached
     command: sleep infinity
-    networks:
-      - rgd-chatbot
 
   gnormplus:
     build:
@@ -147,8 +141,6 @@ services:
       - ~/.cache:/root/.cache:cached
       - ~/Github/bioin-401-project/data:/data:cached
     command: sleep infinity
-    networks:
-      - rgd-chatbot
 
   tmvar3:
     build:
@@ -169,6 +161,3 @@ networks:
   rgd-chatbot:
     external: true
     name: rgd-chatbot
-
-volumes:
-  ollama:

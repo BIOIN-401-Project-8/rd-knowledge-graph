@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import csv
 import glob
 import gzip
 import itertools
@@ -103,19 +104,20 @@ def item_to_list(x):
 def unique_list(xs):
     return '|'.join(sorted(
         set(
-            itertools.chain.from_iterable(
-
-                map(item_to_list, xs.dropna())
+            map(
+                str.strip,
+                itertools.chain.from_iterable(
+                    map(item_to_list, xs.dropna())
+                )
             )
         )
     ))
 
 
 def agg_bioconcepts(df: pd.DataFrame):
-    df = df.groupby("Concept ID").agg(
+    df = df.groupby(["Concept ID", "Type"]).agg(
         {
             "PMID": unique_list,
-            "Type": "first",
             "Mentions": unique_list,
             "Resource": unique_list,
         }
@@ -193,8 +195,9 @@ def get_pmid_date_lookup(pmids):
 def load_bioconcepts_queries_df(file: str):
     if Path(file).stat().st_size == 0:
         return pd.DataFrame()
-    df_file = pd.read_csv(file, sep="\t", dtype={"PMID": str})
+    df_file = pd.read_csv(file, sep="\t", dtype={"PMID": str}, quoting=csv.QUOTE_NONE)
     df_file = df_file[df_file["Concept ID"] != "-"]
+    assert df_file["Mentions"].str.contains("PubTator3").sum() == 0, file
     return df_file
 
 
@@ -214,11 +217,12 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
     files = sorted(files)
     logging.info(f"Processing {len(files)} files")
     if files:
-        for files_batch in tqdm(batch(files, n=64000), total=len(files) // 64000 + 1):
+        for files_batch in tqdm(batch(files, n=1280000), total=len(files) // 1280000 + 1):
             dfs = process_map(load_bioconcepts_queries_df, files_batch, chunksize=1000, max_workers=24, disable=True)
             df = pd.concat([df] + dfs)
             del dfs
             df = agg_bioconcepts(df)
+            assert df["Mentions"].str.contains("PubTator3").sum() == 0
             df.to_csv("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv", sep="\t", index=False)
 
     for node_type, df_type in tqdm(df.groupby("Type")):
@@ -229,7 +233,7 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
         query = f"""
             CALL apoc.periodic.iterate(
                 "UNWIND $rows as row RETURN row",
-                "CREATE (a:`PubTator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
+                "MERGE (a:`PubTator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
                 {{batchSize: 10000, batchMode: "BATCH", concurrency: 8, parallel: true, params: {{rows: $rows}}}}
             )
         """

@@ -8,7 +8,7 @@ docker compose run taggerone ./run_CellLine_BioCXML.sh /data/rgd-knowledge-graph
 docker compose run devcontainer mkdir -p /data/rgd-knowledge-graph/pubtator3/local/taggerone-disease
 docker compose run taggerone ./run_Disease_BioCXML.sh /data/rgd-knowledge-graph/pubtator3/local/aioner TaggerOne-0.3.0/data /data/rgd-knowledge-graph/pubtator3/local/taggerone-disease
 docker compose run devcontainer mkdir -p /data/rgd-knowledge-graph/pubtator3/local/gnorm2
-docker compose run gnorm2 python3 run_batches.py /data/rgd-knowledge-graph/pubtator3/local/aioner /data/rgd-knowledge-graph/pubtator3/local/gnorm2 --batch_size 8 --max_workers 2
+docker compose run gnorm2 python3 run_batches.py /data/rgd-knowledge-graph/pubtator3/local/aioner /data/rgd-knowledge-graph/pubtator3/local/gnorm2 --batch_size 8 --max_workers 2 --ignore_errors
 docker compose run devcontainer mkdir -p /data/rgd-knowledge-graph/pubtator3/local/nlmchem
 docker compose run nlmchem bash -c "./run_Chemical_BioCXML.sh /data/rgd-knowledge-graph/pubtator3/local/aioner CHEM_NORM/data/abbr_frequency_2020.json.gz /data/rgd-knowledge-graph/pubtator3/local/nlmchem"
 docker compose run devcontainer mkdir -p /data/rgd-knowledge-graph/pubtator3/local/gnormplus

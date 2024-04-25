@@ -40,6 +40,9 @@ async def run_relation_queries(session: neo4j.AsyncSession, input_dirs: list[str
     logging.info(f"Processing {len(files)} files")
     if Path("/data/rgd-knowledge-graph/aggrelation2pubtator3.tsv").exists():
         df = pd.read_csv("/data/rgd-knowledge-graph/aggrelation2pubtator3.tsv", sep="\t")
+        logging.info(f"Already processed {len(df)} relations")
+        pmids_already_in_df = set(df["PMID"].apply(item_to_list).explode())
+        files = [f for f in files if Path(f).stem not in pmids_already_in_df]
     else:
         df = pd.DataFrame()
     if files:
@@ -60,7 +63,7 @@ async def run_relation_queries(session: neo4j.AsyncSession, input_dirs: list[str
 
     grouped_df = df.groupby(["1st Type", "2nd Type", "Type"])
     for [node_1st_type, node_2nd_type, relation_type], df_type in tqdm(sorted(grouped_df, key=lambda k: len(k[1]))):
-        logging.info(f"Creating {len(df_type)} {relation_type} relations")
+        logging.info(f"Creating {len(df_type)} {node_1st_type} {relation_type} {node_2nd_type} relations")
         query = f"""
             CALL apoc.periodic.iterate(
                 "UNWIND $rows as row RETURN row",
@@ -94,18 +97,18 @@ def item_to_list(x):
     elif isinstance(x, list):
         return x
     else:
-        return [x]
+        return [str(x)]
 
 
 def unique_list(xs):
-    return sorted(
+    return '|'.join(sorted(
         set(
             itertools.chain.from_iterable(
 
                 map(item_to_list, xs.dropna())
             )
         )
-    )
+    ))
 
 
 def agg_bioconcepts(df: pd.DataFrame):
@@ -202,6 +205,9 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
 
     if Path("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv").exists():
         df = pd.read_csv("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv", sep="\t")
+        pmids_already_in_df = set(df["PMID"].apply(item_to_list).explode())
+        logging.info(f"Already processed {len(pmids_already_in_df)} PMIDs")
+        files = [f for f in files if Path(f).stem not in pmids_already_in_df]
     else:
         df = pd.DataFrame()
 
@@ -213,7 +219,7 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
             df = pd.concat([df] + dfs)
             del dfs
             df = agg_bioconcepts(df)
-        df.to_csv("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv", sep="\t", index=False)
+            df.to_csv("/data/rgd-knowledge-graph/aggbioconcepts2pubtator3.tsv", sep="\t", index=False)
 
     for node_type, df_type in tqdm(df.groupby("Type")):
         logging.info(f"Creating constraint on {node_type} nodes")
@@ -223,7 +229,7 @@ async def run_bioconcepts_queries(session: neo4j.AsyncSession, input_dirs: list[
         query = f"""
             CALL apoc.periodic.iterate(
                 "UNWIND $rows as row RETURN row",
-                "MERGE (a:`PubTator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
+                "CREATE (a:`PubTator3`:`{node_type}` {{ConceptID: row['Concept ID'], Mentions: row['Mentions'], PMID: row['PMID'], Resource: row['Resource']}})",
                 {{batchSize: 10000, batchMode: "BATCH", concurrency: 8, parallel: true, params: {{rows: $rows}}}}
             )
         """
@@ -246,9 +252,9 @@ async def main():
         nargs="+",
         help="input directory",
         default=[
-            # "/data/rgd-knowledge-graph/pubtator3/ftp/relation2pubtator3",
-            # "/data/rgd-knowledge-graph/pubtator3/api/relation2pubtator3",
-            # "/data/rgd-knowledge-graph/pubtator3/local/relation2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/ftp/relation2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/api/relation2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/local/relation2pubtator3",
         ],
     )
     parser.add_argument(
@@ -256,9 +262,9 @@ async def main():
         nargs="+",
         help="input directory",
         default=[
-            # "/data/rgd-knowledge-graph/pubtator3/ftp/bioconcepts2pubtator3",
-            # "/data/rgd-knowledge-graph/pubtator3/api/bioconcepts2pubtator3",
-            # "/data/rgd-knowledge-graph/pubtator3/local/bioconcepts2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/ftp/bioconcepts2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/api/bioconcepts2pubtator3",
+            "/data/rgd-knowledge-graph/pubtator3/local/bioconcepts2pubtator3",
         ],
     )
     args = parser.parse_args()
@@ -278,7 +284,7 @@ async def main():
         uri=args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password), database=args.neo4j_database
     ) as driver:
         async with driver.session(database=args.neo4j_database) as session:
-            # await run_bioconcepts_queries(session, args.input_bioconcepts_dirs)
+            await run_bioconcepts_queries(session, args.input_bioconcepts_dirs)
             await run_relation_queries(session, args.input_relation_dirs)
 
 
